@@ -1,0 +1,3 @@
+../Core/Src/utils.c:18:6:LOG	2
+../Core/Src/utils.c:30:6:LOGLN	2
+../Core/Src/utils.c:44:9:HEX_TO_BCD	1

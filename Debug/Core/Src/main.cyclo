@@ -1,0 +1,9 @@
+../Core/Src/main.c:74:5:_write	4
+../Core/Src/main.c:86:6:i2c_probe	3
+../Core/Src/main.c:100:5:main	1
+../Core/Src/main.c:152:6:SystemClock_Config	3
+../Core/Src/main.c:200:13:MX_I2C1_Init	2
+../Core/Src/main.c:234:13:MX_USART2_UART_Init	2
+../Core/Src/main.c:267:13:MX_GPIO_Init	1
+../Core/Src/main.c:315:13:EncoderMotors_Init	1
+../Core/Src/main.c:330:6:Error_Handler	1

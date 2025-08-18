@@ -1,0 +1,10 @@
+../Core/Src/encoder_motor.c:17:9:get_crc	4
+../Core/Src/encoder_motor.c:29:19:i2c_master_tx	1
+../Core/Src/encoder_motor.c:44:19:i2c_master_rx	1
+../Core/Src/encoder_motor.c:58:6:EM_Init	1
+../Core/Src/encoder_motor.c:66:6:EM_Log_Firmware_Version	1
+../Core/Src/encoder_motor.c:74:6:EM_Log_Status_Flags	3
+../Core/Src/encoder_motor.c:92:6:EM_Reset	1
+../Core/Src/encoder_motor.c:99:6:EM_Reinitialize	1
+../Core/Src/encoder_motor.c:105:6:EM_Clear_Reset	1
+../Core/Src/encoder_motor.c:111:6:EM_Set_Speed	1
