@@ -22,8 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "motor_module.h"
 #include "utils.h"
-#include "encoder_motor.h"
 #include <stdio.h>
 
 /* USER CODE END Includes */
@@ -36,7 +36,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define EM1_I2C_ADDR	(0x0F << 1)
+#define MM1_I2C_ADDR	(0x0F << 1)
 
 /* USER CODE END PD */
 
@@ -48,11 +48,13 @@
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
+TIM_HandleTypeDef htim1;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
-EncoderMotor em1;
+MotorModule mm1;
 
 /* USER CODE END PV */
 
@@ -61,9 +63,10 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 
-static void EncoderMotors_Init(void);
+static void MotorModules_Init(void);
 
 /* USER CODE END PFP */
 
@@ -124,12 +127,11 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_I2C1_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
 
   i2c_probe(&hi2c1);
-  EncoderMotors_Init();
-
-  EM_Set_Speed(&em1, 800, EM_CMD_SET_SPEED_NORMAL);
+  MotorModules_Init();
 
   /* USER CODE END 2 */
 
@@ -139,8 +141,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  EM_Log_Status_Flags(&em1);
-	  HAL_Delay(500);
+	  MMD_Set_Speed(&mm1, 800, MMD_CMD_SET_SPEED_NORMAL);
+	  MME_Update(&mm1);
   }
   /* USER CODE END 3 */
 }
@@ -227,6 +229,56 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_Encoder_InitTypeDef sConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 0;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 65535;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
+  sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
+  sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
+  sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
+  sConfig.IC1Filter = 5;
+  sConfig.IC2Polarity = TIM_ICPOLARITY_RISING;
+  sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
+  sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
+  sConfig.IC2Filter = 5;
+  if (HAL_TIM_Encoder_Init(&htim1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -293,18 +345,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : M1_ENC_A_Pin */
-  GPIO_InitStruct.Pin = M1_ENC_A_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(M1_ENC_A_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : M1_ENC_B_Pin */
-  GPIO_InitStruct.Pin = M1_ENC_B_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(M1_ENC_B_GPIO_Port, &GPIO_InitStruct);
-
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
   /* USER CODE END MX_GPIO_Init_2 */
@@ -312,13 +352,14 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-static void EncoderMotors_Init(void)
+static void MotorModules_Init(void)
 {
-	  /* Motor 1 (front left) */
-	  em1.cfg.hi2c = &hi2c1;
-	  em1.cfg.i2c_addr = EM1_I2C_ADDR;
-	  em1.cfg.motor_num = 1;
-	  EM_Init(&em1);
+	/* Motor 1 (front left) */
+	mm1.cfg.htim = &htim1;
+	mm1.cfg.hi2c = &hi2c1;
+	mm1.cfg.i2c_addr = MM1_I2C_ADDR;
+	mm1.cfg.motor_num = 1;
+	MM_Init(&mm1);
 }
 
 /* USER CODE END 4 */

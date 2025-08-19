@@ -1,0 +1,11 @@
+../Core/Src/motor_module.c:18:9:get_crc	4
+../Core/Src/motor_module.c:30:19:i2c_master_tx	1
+../Core/Src/motor_module.c:45:19:i2c_master_rx	1
+../Core/Src/motor_module.c:60:6:MM_Init	1
+../Core/Src/motor_module.c:81:6:MME_Update	2
+../Core/Src/motor_module.c:101:6:MMD_Log_Firmware_Version	1
+../Core/Src/motor_module.c:109:6:MMD_Log_Status_Flags	3
+../Core/Src/motor_module.c:127:6:MMD_Reset	1
+../Core/Src/motor_module.c:134:6:MMD_Reinitialize	1
+../Core/Src/motor_module.c:140:6:MMD_Clear_Reset	1
+../Core/Src/motor_module.c:146:6:MMD_Set_Speed	1

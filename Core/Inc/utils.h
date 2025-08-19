@@ -23,6 +23,8 @@ typedef enum {
 
 void LOG(LogLevel level, const char *fmt, ...);
 void LOGLN(LogLevel level, const char *fmt, ...);
-uint8_t HEX_TO_BCD(uint8_t hex);
+
+uint8_t hex_to_bcd(uint8_t hex);
+float clampf(float v, float min, float max);
 
 #endif /* UTILS_H */
