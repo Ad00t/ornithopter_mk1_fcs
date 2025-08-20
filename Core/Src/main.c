@@ -18,12 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "logger.h"
 #include "motor_module.h"
-#include "utils.h"
 #include <stdio.h>
 
 /* USER CODE END Includes */
@@ -52,8 +53,30 @@ TIM_HandleTypeDef htim1;
 
 UART_HandleTypeDef huart2;
 
+/* Definitions for readEncoders */
+osThreadId_t readEncodersHandle;
+const osThreadAttr_t readEncoders_attributes = {
+  .name = "readEncoders",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for driveMotors */
+osThreadId_t driveMotorsHandle;
+const osThreadAttr_t driveMotors_attributes = {
+  .name = "driveMotors",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
+/* Definitions for driverStatus */
+osThreadId_t driverStatusHandle;
+const osThreadAttr_t driverStatus_attributes = {
+  .name = "driverStatus",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE BEGIN PV */
 
+Logger dfl_logger;
 MotorModule mm1;
 
 /* USER CODE END PV */
@@ -64,6 +87,10 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
+void StartReadEncoders(void *argument);
+void StartDriveMotors(void *argument);
+void StartDriverStatus(void *argument);
+
 /* USER CODE BEGIN PFP */
 
 static void MotorModules_Init(void);
@@ -89,7 +116,7 @@ int _write(int fd, char* ptr, int len) {
 void i2c_probe(I2C_HandleTypeDef *hi2c) {
     for (uint8_t a = 0x08; a <= 0x77; a++) {                 // 7-bit
         if (HAL_I2C_IsDeviceReady(hi2c, a << 1, 2, 10) == HAL_OK) {
-            LOGLN(LL_INFO, "Found I2C device at 0x%02X", a);
+            log_info(&dfl_logger, "Found I2C device at 0x%02X", a);
         }
     }
 }
@@ -130,10 +157,53 @@ int main(void)
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
 
+  Logger_init(&dfl_logger, stdout);
   i2c_probe(&hi2c1);
   MotorModules_Init();
 
   /* USER CODE END 2 */
+
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of readEncoders */
+  readEncodersHandle = osThreadNew(StartReadEncoders, NULL, &readEncoders_attributes);
+
+  /* creation of driveMotors */
+  driveMotorsHandle = osThreadNew(StartDriveMotors, NULL, &driveMotors_attributes);
+
+  /* creation of driverStatus */
+  driverStatusHandle = osThreadNew(StartDriverStatus, NULL, &driverStatus_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -141,8 +211,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  MMD_Set_Speed(&mm1, 800, MMD_CMD_SET_SPEED_NORMAL);
-	  MME_Update(&mm1);
   }
   /* USER CODE END 3 */
 }
@@ -363,6 +431,88 @@ static void MotorModules_Init(void)
 }
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartReadEncoders */
+/**
+  * @brief  Function implementing the read_encoders thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartReadEncoders */
+void StartReadEncoders(void *argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+	for (;;) {
+		MME_Update(&mm1);
+		osDelay(1);
+	}
+
+	osThreadTerminate(NULL);
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartDriveMotors */
+/**
+* @brief Function implementing the drive_motors thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartDriveMotors */
+void StartDriveMotors(void *argument)
+{
+  /* USER CODE BEGIN StartDriveMotors */
+  /* Infinite loop */
+	for (;;) {
+		MMD_Set_Speed(&mm1, 800, MMD_CMD_SET_SPEED_NORMAL);
+		osDelay(50);
+	}
+
+	osThreadTerminate(NULL);
+  /* USER CODE END StartDriveMotors */
+}
+
+/* USER CODE BEGIN Header_StartDriverStatus */
+/**
+* @brief Function implementing the driverStatus thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartDriverStatus */
+void StartDriverStatus(void *argument)
+{
+  /* USER CODE BEGIN StartDriverStatus */
+  /* Infinite loop */
+	for (;;) {
+		MMD_Log_Status_Flags(&mm1);
+		osDelay(1000);
+	}
+
+	osThreadTerminate(NULL);
+  /* USER CODE END StartDriverStatus */
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM6 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM6)
+  {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.

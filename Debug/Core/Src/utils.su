@@ -1,4 +1,4 @@
-../Core/Src/utils.c:19:6:LOG	36	static
-../Core/Src/utils.c:31:6:LOGLN	36	static
-../Core/Src/utils.c:45:9:hex_to_bcd	16	static
-../Core/Src/utils.c:49:7:clampf	24	static
+../Core/Src/utils.c:11:9:hex_to_bcd	16	static
+../Core/Src/utils.c:15:7:clampf	24	static
+../Core/Src/utils.c:19:7:string_copy	24	static
+../Core/Src/utils.c:27:6:string_free	16	static
