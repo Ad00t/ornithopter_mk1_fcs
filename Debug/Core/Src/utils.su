@@ -1,4 +1,2 @@
 ../Core/Src/utils.c:11:9:hex_to_bcd	16	static
 ../Core/Src/utils.c:15:7:clampf	24	static
-../Core/Src/utils.c:19:7:string_copy	24	static
-../Core/Src/utils.c:27:6:string_free	16	static

@@ -1,74 +1,85 @@
 /*
- * logger.c
+  *logger.c
  *
- *  Created on: Aug 19, 2025
- *      Author: adhit
+  * Created on: Aug 19, 2025
+  *     Author: adhit
  */
 
 #include "logger.h"
-#include "utils.h"
-#include "stm32f4xx_hal.h"
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 
-const char* ll_labels[] = {
-	"ERROR", "WARN", "INFO", "DEBUG", "TRACE"
+const char *ll_labels[] = {
+	"TRACE", "DEBUG", "INFO", "WARN", "ERROR"
 };
 
-void Logger_init(Logger* logger, FILE* out) {
+void Logger_init(Logger *logger, osMessageQueueId_t mq_id, FILE *out) {
+	logger->mq_id = mq_id;
+	logger->msg_size = (size_t)osMessageQueueGetMsgSize(mq_id);
 	logger->out = out;
-	LogQueue_Init(logger->q, string_copy, string_free);
 }
 
-void Logger_log_impl(Logger* logger, LogLevel level, const char* fmt, va_list args) {
-	if (level > LOG_LEVEL) return;
-    float t_s = HAL_GetTick() / 1000.0f;
+void Logger_log_impl(Logger *logger, LogLevel level, const char *fmt, va_list args) {
+	if (level < LOG_LEVEL) return;
+    float t_s = (float)osKernelGetTickCount() / configTICK_RATE_HZ;
 
-    char buf[MAX_LOG_LEN];
-    int n = snprintf(buf, sizeof(buf), LOG_PREFIX_FMT, t_s, ll_labels[level]);
+    char buf[logger->msg_size];
+    size_t max_msg_len = sizeof(buf) - 3;
+    int n = snprintf(buf, max_msg_len, LOG_PREFIX_FMT, t_s, ll_labels[level]);
     if (n < 0) n = 0;
-    vsnprintf(buf + n, sizeof(buf) - n, fmt, args);
-    if (!LogQueue_Enqueue(logger->q, buf)) {
-    	printf("ERROR: LOG QUEUE FULL\r\n");
+    vsnprintf(buf + n, max_msg_len - n, fmt, args);
+
+    size_t len = strlen(buf);
+    if (len + 2 < sizeof(buf)) {
+        buf[len] = '\r';
+        buf[len + 1] = '\n';
+        buf[len + 2] = '\0';
+    } else {
+        buf[sizeof(buf) - 3] = '\r';
+        buf[sizeof(buf) - 2] = '\n';
+        buf[sizeof(buf) - 1] = '\0';
     }
+
+    osMessageQueuePut(logger->mq_id, buf, (uint8_t)level, 10);
 }
 
-void Logger_write_log(Logger* logger) {
-	char buf[MAX_LOG_LEN];
-	if (LogQueue_Dequeue(logger->q, buf)) {
+void Logger_write_log(Logger *logger) {
+	char buf[logger->msg_size];
+	while (osMessageQueueGet(logger->mq_id, buf, NULL, 10) == osOK) {
 		fprintf(logger->out, "%s", buf);
 	}
 }
 
-void log_error(Logger* logger, const char* fmt, ...) {
+void log_error(Logger *logger, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     Logger_log_impl(logger, LL_ERROR, fmt, args);
     va_end(args);
 }
 
-void log_warn(Logger* logger, const char* fmt, ...) {
+void log_warn(Logger *logger, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     Logger_log_impl(logger, LL_WARN, fmt, args);
     va_end(args);
 }
 
-void log_info(Logger* logger, const char* fmt, ...) {
+void log_info(Logger *logger, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     Logger_log_impl(logger, LL_INFO, fmt, args);
     va_end(args);
 }
 
-void log_debug(Logger* logger, const char* fmt, ...) {
+void log_debug(Logger *logger, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     Logger_log_impl(logger, LL_DEBUG, fmt, args);
     va_end(args);
 }
 
-void log_trace(Logger* logger, const char* fmt, ...) {
+void log_trace(Logger *logger, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     Logger_log_impl(logger, LL_TRACE, fmt, args);

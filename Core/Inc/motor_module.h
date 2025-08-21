@@ -32,8 +32,8 @@
 
 /* Configuration structure */
 typedef struct {
-    TIM_HandleTypeDef* htim;
-    I2C_HandleTypeDef* hi2c;
+    TIM_HandleTypeDef *htim;
+    I2C_HandleTypeDef *hi2c;
     uint16_t i2c_addr;
     uint8_t	motor_num;
 } MMD_Config;
@@ -51,17 +51,17 @@ typedef struct {
 } MotorModule;
 
 /* General */
-void MM_Init(MotorModule* m);
+void MM_Init(MotorModule *m);
 
 /* Encoder */
-void MME_Update(MotorModule* m);
+void MME_Update(MotorModule *m);
 
 /* Driver */
-void MMD_Log_Firmware_Version(MotorModule* m);
-void MMD_Log_Status_Flags(MotorModule* m);
-void MMD_Reset(MotorModule* m);
-void MMD_Reinitialize(MotorModule* m);
-void MMD_Clear_Reset(MotorModule* m);
-void MMD_Set_Speed(MotorModule* m, int16_t speed, uint8_t mode);
+void MMD_Log_Firmware_Version(MotorModule *m);
+void MMD_Log_Status_Flags(MotorModule *m);
+void MMD_Reset(MotorModule *m);
+void MMD_Reinitialize(MotorModule *m);
+void MMD_Clear_Reset(MotorModule *m);
+void MMD_Set_Speed(MotorModule *m, int16_t speed, uint8_t mode);
 
 #endif /* MOTOR_MODULE_H */

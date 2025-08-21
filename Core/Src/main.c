@@ -53,26 +53,38 @@ TIM_HandleTypeDef htim1;
 
 UART_HandleTypeDef huart2;
 
+/* Definitions for defaultLogger */
+osThreadId_t defaultLoggerHandle;
+const osThreadAttr_t defaultLogger_attributes = {
+  .name = "defaultLogger",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for logDriverStatus */
+osThreadId_t logDriverStatusHandle;
+const osThreadAttr_t logDriverStatus_attributes = {
+  .name = "logDriverStatus",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* Definitions for readEncoders */
 osThreadId_t readEncodersHandle;
 const osThreadAttr_t readEncoders_attributes = {
   .name = "readEncoders",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
 };
 /* Definitions for driveMotors */
 osThreadId_t driveMotorsHandle;
 const osThreadAttr_t driveMotors_attributes = {
   .name = "driveMotors",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityBelowNormal,
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityHigh,
 };
-/* Definitions for driverStatus */
-osThreadId_t driverStatusHandle;
-const osThreadAttr_t driverStatus_attributes = {
-  .name = "driverStatus",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+/* Definitions for dfl_log_q */
+osMessageQueueId_t dfl_log_qHandle;
+const osMessageQueueAttr_t dfl_log_q_attributes = {
+  .name = "dfl_log_q"
 };
 /* USER CODE BEGIN PV */
 
@@ -87,9 +99,10 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
+void StartDefaultLogger(void *argument);
+void StartLogDriverStatus(void *argument);
 void StartReadEncoders(void *argument);
 void StartDriveMotors(void *argument);
-void StartDriverStatus(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -116,7 +129,7 @@ int _write(int fd, char* ptr, int len) {
 void i2c_probe(I2C_HandleTypeDef *hi2c) {
     for (uint8_t a = 0x08; a <= 0x77; a++) {                 // 7-bit
         if (HAL_I2C_IsDeviceReady(hi2c, a << 1, 2, 10) == HAL_OK) {
-            log_info(&dfl_logger, "Found I2C device at 0x%02X", a);
+            log_info(&dfl_logger, "Found I2C device at 0x%02X \r\n", a);
         }
     }
 }
@@ -156,11 +169,6 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-
-  Logger_init(&dfl_logger, stdout);
-  i2c_probe(&hi2c1);
-  MotorModules_Init();
-
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -178,22 +186,30 @@ int main(void)
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
+  /* Create the queue(s) */
+  /* creation of dfl_log_q */
+  dfl_log_qHandle = osMessageQueueNew (16, 512, &dfl_log_q_attributes);
+
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
+  Logger_init(&dfl_logger, dfl_log_qHandle, stdout);
+  i2c_probe(&hi2c1);
+  MotorModules_Init();
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
+  /* creation of defaultLogger */
+  defaultLoggerHandle = osThreadNew(StartDefaultLogger, NULL, &defaultLogger_attributes);
+
+  /* creation of logDriverStatus */
+  logDriverStatusHandle = osThreadNew(StartLogDriverStatus, NULL, &logDriverStatus_attributes);
+
   /* creation of readEncoders */
   readEncodersHandle = osThreadNew(StartReadEncoders, NULL, &readEncoders_attributes);
 
   /* creation of driveMotors */
   driveMotorsHandle = osThreadNew(StartDriveMotors, NULL, &driveMotors_attributes);
 
-  /* creation of driverStatus */
-  driverStatusHandle = osThreadNew(StartDriverStatus, NULL, &driverStatus_attributes);
-
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -432,19 +448,19 @@ static void MotorModules_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartReadEncoders */
+/* USER CODE BEGIN Header_StartDefaultLogger */
 /**
-  * @brief  Function implementing the read_encoders thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_StartReadEncoders */
-void StartReadEncoders(void *argument)
+* @brief Function implementing the defaultLogger thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartDefaultLogger */
+void StartDefaultLogger(void *argument)
 {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
 	for (;;) {
-		MME_Update(&mm1);
+		Logger_write_log(&dfl_logger);
 		osDelay(1);
 	}
 
@@ -452,9 +468,49 @@ void StartReadEncoders(void *argument)
   /* USER CODE END 5 */
 }
 
+/* USER CODE BEGIN Header_StartLogDriverStatus */
+/**
+* @brief Function implementing the logDriverStatus thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartLogDriverStatus */
+void StartLogDriverStatus(void *argument)
+{
+  /* USER CODE BEGIN StartLogDriverStatus */
+  /* Infinite loop */
+	for (;;) {
+		MMD_Log_Status_Flags(&mm1);
+		osDelay(1000);
+	}
+
+	osThreadTerminate(NULL);
+  /* USER CODE END StartLogDriverStatus */
+}
+
+/* USER CODE BEGIN Header_StartReadEncoders */
+/**
+* @brief Function implementing the readEncoders thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartReadEncoders */
+void StartReadEncoders(void *argument)
+{
+  /* USER CODE BEGIN StartReadEncoders */
+  /* Infinite loop */
+	for (;;) {
+		MME_Update(&mm1);
+		osDelay(10);
+	}
+
+	osThreadTerminate(NULL);
+  /* USER CODE END StartReadEncoders */
+}
+
 /* USER CODE BEGIN Header_StartDriveMotors */
 /**
-* @brief Function implementing the drive_motors thread.
+* @brief Function implementing the driveMotors thread.
 * @param argument: Not used
 * @retval None
 */
@@ -465,31 +521,11 @@ void StartDriveMotors(void *argument)
   /* Infinite loop */
 	for (;;) {
 		MMD_Set_Speed(&mm1, 800, MMD_CMD_SET_SPEED_NORMAL);
-		osDelay(50);
+		osDelay(20);
 	}
 
 	osThreadTerminate(NULL);
   /* USER CODE END StartDriveMotors */
-}
-
-/* USER CODE BEGIN Header_StartDriverStatus */
-/**
-* @brief Function implementing the driverStatus thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartDriverStatus */
-void StartDriverStatus(void *argument)
-{
-  /* USER CODE BEGIN StartDriverStatus */
-  /* Infinite loop */
-	for (;;) {
-		MMD_Log_Status_Flags(&mm1);
-		osDelay(1000);
-	}
-
-	osThreadTerminate(NULL);
-  /* USER CODE END StartDriverStatus */
 }
 
 /**
