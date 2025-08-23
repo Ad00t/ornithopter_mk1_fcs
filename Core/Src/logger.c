@@ -6,6 +6,7 @@
  */
 
 #include "logger.h"
+#include "cmsis_os.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -21,8 +22,12 @@ void Logger_init(Logger *logger, osMessageQueueId_t mq_id, FILE *out) {
 }
 
 void Logger_log_impl(Logger *logger, LogLevel level, const char *fmt, va_list args) {
-	if (level < LOG_LEVEL) return;
-    float t_s = (float)osKernelGetTickCount() / configTICK_RATE_HZ;
+    if (level < LOG_LEVEL) return;
+
+    float t_s = 0.0f;
+    if (osKernelGetState() == osKernelRunning) {
+        t_s = (float)osKernelGetTickCount() / configTICK_RATE_HZ;
+    }
 
     char buf[logger->msg_size];
     size_t max_msg_len = sizeof(buf) - 3;
@@ -41,7 +46,11 @@ void Logger_log_impl(Logger *logger, LogLevel level, const char *fmt, va_list ar
         buf[sizeof(buf) - 1] = '\0';
     }
 
-    osMessageQueuePut(logger->mq_id, buf, (uint8_t)level, 10);
+    if (osKernelGetState() == osKernelRunning) {
+        osMessageQueuePut(logger->mq_id, buf, (uint8_t)level, 10);
+    } else {
+        fprintf(logger->out, "%s", buf);
+    }
 }
 
 void Logger_write_log(Logger *logger) {

@@ -9,6 +9,7 @@
 #define MOTOR_MODULE_H
 
 #include "stm32f4xx_hal.h"
+#include <stdint.h>
 
 /* Encoder */
 #define MME_PPR							20.0f
@@ -41,8 +42,6 @@ typedef struct {
 /* Instance */
 typedef struct {
     MMD_Config cfg;
-    uint8_t initialized;
-    int encoder_counts;
     int last_encoder_counts;
     uint32_t last_encoder_time;
     float angle;

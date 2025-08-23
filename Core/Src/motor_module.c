@@ -8,9 +8,11 @@
 #include "motor_module.h"
 #include "utils.h"
 #include "logger.h"
+#include "stm32f4xx_hal.h"
 #include "cmsis_os.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 #include <math.h>
 
 const char *flags[] = {
@@ -19,31 +21,19 @@ const char *flags[] = {
 
 /* I2C helpers */
 
-uint8_t get_crc(uint8_t *message, uint8_t length) {
-	uint8_t crc = 0;
-	for (uint8_t i = 0; i < length; i++) {
-		crc ^= message[i];
-		for (uint8_t j = 0; j < 8; j++) {
-			if (crc & 1) crc ^= 0x91;
-			crc >>= 1;
-		}
-	}
-	return crc;
-}
-
 HAL_StatusTypeDef i2c_master_tx(MotorModule *m, uint8_t *buf, uint16_t size) {
 	uint8_t to_tx[size+1];
 	memcpy(to_tx, buf, size);
 	to_tx[size] = get_crc(buf, size);
 	HAL_StatusTypeDef hstat = HAL_I2C_Master_Transmit(m->cfg.hi2c, m->cfg.i2c_addr, to_tx, size+1, HAL_MAX_DELAY);
 
-	if (LOG_LEVEL <= LL_DEBUG) {
+	if (LOG_LEVEL <= LL_TRACE) {
 		char lbuf[dfl_logger.msg_size];
 		int n = snprintf(lbuf, dfl_logger.msg_size, "MCU => 0x%02X -- [ ", m->cfg.i2c_addr);
 		for (size_t i = 0; i < size+1; i++)
 		    n += snprintf(lbuf + n, dfl_logger.msg_size - n, "0x%02X ", to_tx[i]);
 		snprintf(lbuf + n, dfl_logger.msg_size - n, "]");
-		log_debug(&dfl_logger, "%s", lbuf);
+		log_trace(&dfl_logger, "%s", lbuf);
 	}
 	return hstat;
 }
@@ -52,13 +42,13 @@ HAL_StatusTypeDef i2c_master_rx(MotorModule *m, uint8_t *buf, uint16_t size) {
 	HAL_StatusTypeDef hstat = HAL_I2C_Master_Receive(m->cfg.hi2c, m->cfg.i2c_addr, buf, size, HAL_MAX_DELAY);
 	uint8_t calcrc = get_crc(buf, size-1);
 
-	if (LOG_LEVEL <= LL_DEBUG) {
+	if (LOG_LEVEL <= LL_TRACE) {
 		char lbuf[dfl_logger.msg_size];
 		int n = snprintf(lbuf, dfl_logger.msg_size, "0x%02X => MCU -- [ ", m->cfg.i2c_addr);
 		for (size_t i = 0; i < size+1; i++)
 		    n += snprintf(lbuf + n, dfl_logger.msg_size - n, "0x%02X ", buf[i]);
 		snprintf(lbuf + n, dfl_logger.msg_size - n, "] -- calcrc=0x%02X", calcrc);
-		log_debug(&dfl_logger, "%s", lbuf);
+		log_trace(&dfl_logger, "%s", lbuf);
 	}
 	return hstat;
 }
@@ -67,7 +57,6 @@ HAL_StatusTypeDef i2c_master_rx(MotorModule *m, uint8_t *buf, uint16_t size) {
 
 void MM_Init(MotorModule *m) {
 	// Encoder init
-	m->encoder_counts = 0;
 	m->last_encoder_counts = 0;
 	m->last_encoder_time = 0;
 	m->angle = 0;
@@ -77,29 +66,28 @@ void MM_Init(MotorModule *m) {
 
 	// Driver init
 	MMD_Reset(m);
+	delay(100);
 	MMD_Reinitialize(m);
-	MMD_Log_Firmware_Version(m);
+	delay(100);
 	MMD_Clear_Reset(m);
-
-	m->initialized = 1;
+	delay(20);
+	MMD_Log_Firmware_Version(m);
 }
 
 /* Encoder */
 
 void MME_Update(MotorModule *m) {
 	uint32_t t_ms = osKernelGetTickCount();
-    m->encoder_counts = (int) __HAL_TIM_GET_COUNTER(m->cfg.htim);
+    uint32_t counts = (uint32_t)__HAL_TIM_GET_COUNTER(m->cfg.htim);
 
-    if (m->encoder_counts != m->last_encoder_counts) {
-        m->angle = fmodf(MME_ANGLE_DEG  *m->encoder_counts / MME_CPR, 360.0f);
-        float dcount = m->encoder_counts - m->last_encoder_counts;
-        float dt_s = (t_ms - m->last_encoder_time) / 1000.0f;
-        m->rpm = (dcount / MME_CPR) / (dt_s / 60.0f);
+	m->angle = fmodf(MME_ANGLE_DEG * counts / MME_CPR, 360.0f);
+	float dcount = counts - m->last_encoder_counts;
+	float dt_s = (t_ms - m->last_encoder_time) / 1000.0f;
+	if (dt_s != 0) m->rpm = (dcount / MME_CPR) / (dt_s / 60.0f);
 
-        m->last_encoder_counts = m->encoder_counts;
-        m->last_encoder_time = t_ms;
-        log_trace(&dfl_logger, "ENCODER -- count=%u -- angle=%.3f -- rpm=%.3f", m->encoder_counts, m->angle, m->rpm);
-    }
+	m->last_encoder_counts = counts;
+	m->last_encoder_time = t_ms;
+	log_debug(&dfl_logger, "ENCODER -- count=%u -- angle=%.3f -- rpm=%.3f", counts, m->angle, m->rpm);
 }
 
 /* Driver */
@@ -136,7 +124,6 @@ void MMD_Reset(MotorModule *m) {
 	uint8_t cmd[1] = { MMD_CMD_RESET };
 	HAL_StatusTypeDef hstat = i2c_master_tx(m, cmd, 1);
 	log_info(&dfl_logger, "DRIVER RESET -- hstat=0x%02X", hstat);
-	osDelay(10);
 }
 
 void MMD_Reinitialize(MotorModule *m) {
@@ -154,5 +141,5 @@ void MMD_Clear_Reset(MotorModule *m) {
 void MMD_Set_Speed(MotorModule *m, int16_t speed, uint8_t mode) {
 	uint8_t cmd[4] = { mode, m->cfg.motor_num & 0x7F, speed & 0x7F, (speed >> 7) & 0x7F };
 	HAL_StatusTypeDef hstat = i2c_master_tx(m, cmd, 4);
-	log_debug(&dfl_logger, "DRIVER SET SPEED -- hstat=0x%02X", hstat);
+	log_debug(&dfl_logger, "DRIVER SET SPEED -- speed=%d -- mode=0x%02X -- hstat=0x%02X", speed, mode, hstat);
 }

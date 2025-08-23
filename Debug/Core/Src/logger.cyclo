@@ -1,8 +1,8 @@
-../Core/Src/logger.c:17:6:Logger_init	1
-../Core/Src/logger.c:23:6:Logger_log_impl	4
-../Core/Src/logger.c:47:6:Logger_write_log	2
-../Core/Src/logger.c:54:6:log_error	1
-../Core/Src/logger.c:61:6:log_warn	1
-../Core/Src/logger.c:68:6:log_info	1
-../Core/Src/logger.c:75:6:log_debug	1
-../Core/Src/logger.c:82:6:log_trace	1
+../Core/Src/logger.c:18:6:Logger_init	1
+../Core/Src/logger.c:24:6:Logger_log_impl	6
+../Core/Src/logger.c:56:6:Logger_write_log	2
+../Core/Src/logger.c:63:6:log_error	1
+../Core/Src/logger.c:70:6:log_warn	1
+../Core/Src/logger.c:77:6:log_info	1
+../Core/Src/logger.c:84:6:log_debug	1
+../Core/Src/logger.c:91:6:log_trace	1

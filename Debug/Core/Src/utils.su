@@ -1,2 +1,5 @@
-../Core/Src/utils.c:11:9:hex_to_bcd	16	static
-../Core/Src/utils.c:15:7:clampf	24	static
+../Core/Src/utils.c:14:9:hex_to_bcd	16	static
+../Core/Src/utils.c:18:7:clampf	24	static
+../Core/Src/utils.c:22:9:get_crc	24	static
+../Core/Src/utils.c:34:6:i2c_probe	24	static
+../Core/Src/utils.c:42:6:delay	24	static

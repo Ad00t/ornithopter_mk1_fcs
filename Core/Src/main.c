@@ -25,6 +25,8 @@
 
 #include "logger.h"
 #include "motor_module.h"
+#include "utils.h"
+#include "pid.h"
 #include <stdio.h>
 
 /* USER CODE END Includes */
@@ -57,7 +59,7 @@ UART_HandleTypeDef huart2;
 osThreadId_t defaultLoggerHandle;
 const osThreadAttr_t defaultLogger_attributes = {
   .name = "defaultLogger",
-  .stack_size = 512 * 4,
+  .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for logDriverStatus */
@@ -90,6 +92,7 @@ const osMessageQueueAttr_t dfl_log_q_attributes = {
 
 Logger dfl_logger;
 MotorModule mm1;
+PID mm1_pid;
 
 /* USER CODE END PV */
 
@@ -124,14 +127,6 @@ int _write(int fd, char* ptr, int len) {
 		  return -1;
   }
   return -1;
-}
-
-void i2c_probe(I2C_HandleTypeDef *hi2c) {
-    for (uint8_t a = 0x08; a <= 0x77; a++) {                 // 7-bit
-        if (HAL_I2C_IsDeviceReady(hi2c, a << 1, 2, 10) == HAL_OK) {
-            log_info(&dfl_logger, "Found I2C device at 0x%02X \r\n", a);
-        }
-    }
 }
 
 /* USER CODE END 0 */
@@ -194,6 +189,7 @@ int main(void)
   Logger_init(&dfl_logger, dfl_log_qHandle, stdout);
   i2c_probe(&hi2c1);
   MotorModules_Init();
+  PID_init(&mm1_pid, 1, 0.005, 0.003);
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -243,7 +239,7 @@ void SystemClock_Config(void)
   /** Configure the main internal regulator output voltage
   */
   __HAL_RCC_PWR_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -253,12 +249,19 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 16;
-  RCC_OscInitStruct.PLL.PLLN = 336;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLN = 180;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 2;
   RCC_OscInitStruct.PLL.PLLR = 2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Activate the Over-Drive mode
+  */
+  if (HAL_PWREx_EnableOverDrive() != HAL_OK)
   {
     Error_Handler();
   }
@@ -269,10 +272,10 @@ void SystemClock_Config(void)
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
   {
     Error_Handler();
   }
@@ -414,7 +417,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -422,12 +425,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
+  /*Configure GPIO pin : LED_Pin */
+  GPIO_InitStruct.Pin = LED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -461,10 +464,8 @@ void StartDefaultLogger(void *argument)
   /* Infinite loop */
 	for (;;) {
 		Logger_write_log(&dfl_logger);
-		osDelay(1);
+		delay(1);
 	}
-
-	osThreadTerminate(NULL);
   /* USER CODE END 5 */
 }
 
@@ -481,10 +482,8 @@ void StartLogDriverStatus(void *argument)
   /* Infinite loop */
 	for (;;) {
 		MMD_Log_Status_Flags(&mm1);
-		osDelay(1000);
+		delay(1000);
 	}
-
-	osThreadTerminate(NULL);
   /* USER CODE END StartLogDriverStatus */
 }
 
@@ -501,10 +500,8 @@ void StartReadEncoders(void *argument)
   /* Infinite loop */
 	for (;;) {
 		MME_Update(&mm1);
-		osDelay(10);
+		delay(10);
 	}
-
-	osThreadTerminate(NULL);
   /* USER CODE END StartReadEncoders */
 }
 
@@ -519,12 +516,13 @@ void StartDriveMotors(void *argument)
 {
   /* USER CODE BEGIN StartDriveMotors */
   /* Infinite loop */
+	PID_reset(&mm1_pid, 90, mm1.angle);
 	for (;;) {
-		MMD_Set_Speed(&mm1, 800, MMD_CMD_SET_SPEED_NORMAL);
-		osDelay(20);
+		int16_t speed = (int16_t)clampf(PID_update(&mm1_pid, mm1.angle), -800, 800);
+		log_info(&dfl_logger, "angle=%.3f -- rpm=%.3f -- speed=%d", mm1.angle, mm1.rpm, speed);
+		MMD_Set_Speed(&mm1, speed, MMD_CMD_SET_SPEED_NORMAL);
+		delay(20);
 	}
-
-	osThreadTerminate(NULL);
   /* USER CODE END StartDriveMotors */
 }
 
@@ -539,14 +537,12 @@ void StartDriveMotors(void *argument)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
-
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM6)
   {
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-
   /* USER CODE END Callback 1 */
 }
 
